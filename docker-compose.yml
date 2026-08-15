@@ -1,7 +1,8 @@
-version: '3.8'
-
 services:
-  # CPU-only deployment (default)
+  # CPU-only deployment (default).
+  # Benchmarked at ~16x real-time on 12 cores, within ~25% of the CUDA path on
+  # long audio and faster on short clips: the int8 ONNX export falls back to CPU
+  # for most of the encoder anyway. CPU also leaves the GPUs free for other work.
   parakeet-cpu:
     build:
       context: .
@@ -12,6 +13,8 @@ services:
       - "5092:5092"
     volumes:
       - parakeet-models:/app/models
+    environment:
+      - INFERENCE_DEVICE=cpu
     restart: unless-stopped
     healthcheck:
       test: [ "CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:5092/health')" ]
@@ -20,8 +23,12 @@ services:
       retries: 3
       start_period: 60s
 
-  # GPU deployment (requires NVIDIA Container Toolkit)
+  # GPU deployment. Opt-in only: `docker compose --profile gpu up -d parakeet-gpu`
+  # (stop parakeet-cpu first, they share port 5092).
+  # Needs the NVIDIA Container Toolkit, and needs enough free VRAM on the pinned
+  # card: sharing it with a large LLM will OOM mid-transcription.
   parakeet-gpu:
+    profiles: [ "gpu" ]
     build:
       context: .
       dockerfile: Dockerfile.gpu
@@ -31,13 +38,15 @@ services:
       - "5092:5092"
     volumes:
       - parakeet-models:/app/models
+    environment:
+      - INFERENCE_DEVICE=gpu
     restart: unless-stopped
     deploy:
       resources:
         reservations:
           devices:
             - driver: nvidia
-              count: 1
+              device_ids: [ "1" ]  # Quadro RTX 4000
               capabilities: [ gpu ]
     healthcheck:
       test: [ "CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:5092/health')" ]

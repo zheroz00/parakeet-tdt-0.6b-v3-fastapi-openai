@@ -1,7 +1,7 @@
 # Parakeet TDT 0.6B ONNX - GPU Dockerfile
 # High-performance speech transcription with NVIDIA CUDA
 
-FROM nvidia/cuda:12.1.1-cudnn8-runtime-ubuntu22.04
+FROM nvidia/cuda:12.4.1-cudnn-runtime-ubuntu22.04
 
 LABEL maintainer="Parakeet TDT"
 LABEL description="ONNX-optimized speech transcription service (GPU/CUDA)"
@@ -57,6 +57,7 @@ ENV HF_HOME=/app/models
 ENV HF_HUB_CACHE=/app/models
 ENV HF_HUB_DISABLE_SYMLINKS_WARNING=true
 ENV PYTHONUNBUFFERED=1
+ENV INFERENCE_DEVICE=cpu
 ENV NVIDIA_VISIBLE_DEVICES=all
 ENV NVIDIA_DRIVER_CAPABILITIES=compute,utility
 
