@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass
-from typing import List, Optional, Tuple
+from typing import Callable, List, Optional, Tuple
 
 from .numbers import convert_numbers
 from .vocabulary import Vocabulary, parse_vocabulary
@@ -23,21 +23,25 @@ class CleanResult:
 
 
 def clean(text: str, vocabulary: Optional[Vocabulary] = None) -> CleanResult:
-    """Apply vocabulary fixes, then number rules. Never raises: on any error
-    the original text comes back unchanged and the error is logged."""
+    """Apply vocabulary fixes, then number rules. Never raises: a stage that
+    fails is logged and skipped (its input text comes back unchanged), so one
+    broken stage cannot disable the other."""
+    changes: List[Change] = []
+    if vocabulary is not None:
+        text = _run_stage("vocabulary", lambda t: vocabulary.rules().apply(t), text, changes)
+    text = _run_stage("number", convert_numbers, text, changes)
+    return CleanResult(text, tuple(changes))
+
+
+def _run_stage(name: str, stage: Callable[[str], Tuple[str, List[Change]]], text: str, changes: List[Change]) -> str:
+    """Run one cleanup stage. On failure, log it and return the text unchanged."""
     try:
-        changes: List[Change] = []
-        if vocabulary is not None:
-            text_out, found = vocabulary.rules().apply(text)
-            changes.extend(found)
-        else:
-            text_out = text
-        text_out, found = convert_numbers(text_out)
-        changes.extend(found)
-        return CleanResult(text_out, tuple(changes))
+        text_out, found = stage(text)
     except Exception:
-        log.exception("transcript cleanup failed; returning the raw transcript")
-        return CleanResult(text, ())
+        log.exception("transcript cleanup (%s stage) failed; skipping it", name)
+        return text
+    changes.extend(found)
+    return text_out
 
 
 def clean_segments(segments: List[dict], vocabulary: Optional[Vocabulary] = None) -> List[Change]:

@@ -26,7 +26,30 @@ def test_never_raises(monkeypatch, caplog):
     result = clean("four point two volts")
     assert result.text == "four point two volts"
     assert result.changes == ()
-    assert "returning the raw transcript" in caplog.text
+    assert "number stage) failed" in caplog.text
+
+
+def test_vocabulary_failure_does_not_stop_numbers(tmp_path, monkeypatch, caplog):
+    vocab = vocab_file(tmp_path)
+
+    def boom():
+        raise RuntimeError("bad vocabulary")
+
+    monkeypatch.setattr(vocab, "rules", boom)
+    result = clean("two options", vocab)
+    assert result.text == "2 options"
+    assert result.changes == (("two", "2"),)
+    assert "vocabulary" in caplog.text
+
+
+def test_number_failure_keeps_vocabulary_fixes(tmp_path, monkeypatch):
+    def boom(text):
+        raise RuntimeError("bug in a rule")
+
+    monkeypatch.setattr(text_cleanup, "convert_numbers", boom)
+    result = clean("Corky has two tabs", vocab_file(tmp_path))
+    assert result.text == "Corkie has two tabs"
+    assert result.changes == (("Corky", "Corkie"),)
 
 
 def test_clean_segments_in_place(tmp_path):
