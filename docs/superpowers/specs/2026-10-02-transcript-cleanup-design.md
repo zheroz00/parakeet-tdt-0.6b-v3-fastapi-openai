@@ -78,8 +78,16 @@ Rule details:
   ("four seventy" → 470, "eighteen six fifty" → 18650, "five six seven eight" → 5678).
   "X hundred" with X > 9 multiplies ("fifty six hundred" → 5600).
   Known trade-off: a spoken time "one twenty" also becomes 120.
+  Two limits keep ordinary phrases intact: a lone digit after a multi-digit
+  chunk stays separate ("twenty four seven support" → "24 7 support", "ten
+  five" → "10 5"), and exactly two single digits are left as spoken, since
+  they are usually a range or count ("two three minutes", "test one two").
+  Three or more single digits join ("nine one one" → 911).
 - **Decimals:** `<number> point <digit words>` → `N.DDD`, keeping trailing
-  zeros ("zero point one zero" → 0.10).
+  zeros ("zero point one zero" → 0.10). Several `point` parts are a version
+  number: every part is dotted ("one point two point three" → 1.2.3, "Node
+  twenty two point one one point zero" → 22.11.0). A hyphenated denominator is
+  not digits ("two point three-quarters" stays as spoken).
 - **Fractions:** `<numerator> <denominator>` where denominator is half, third,
   quarter, eighth, sixteenth, thirty second, sixty fourth (optionally plural)
   → `n/d`. Only when the fraction is proper and in lowest terms: "two quarters"
@@ -89,6 +97,10 @@ Rule details:
   Eighth, sixteenth, thirty second and sixty fourth allow any numerator in
   the singular too ("three sixteenth inch" → 3/16). A denominator hyphenated
   onto a following word ("half-hour", "quarter-inch") is not a denominator.
+  Neither is one followed by party, parties, grade, grader(s), century,
+  centuries, generation(s) or hour(s) ("one third party library", "three
+  eighth graders", "one half hour show" stay as spoken); this applies to the
+  word, article, hyphenated and digit forms.
   The numerator and denominator may be joined by a hyphen, as the model often
   writes them ("three-quarters" → 3/4, "three thirty-second inch" → 3/32 inch,
   "five sixty-fourths" → 5/64); when that is not a valid fraction
@@ -101,7 +113,8 @@ Rule details:
   "30 seconds".
 - **Fractions the model already wrote in digits.** Parakeet sometimes writes a
   spoken fraction as garbled digits: "one thirty second inch" → "1.32nd inch"
-  or "132 inch" (seen in the archive). Repaired to `n/d` when the numerator is
+  or "132 inch" (seen in the archive). Never repaired inside a decimal or after
+  a thousands comma ("0.116 inch", "1,116 inch", "2.564 inch" stay). Repaired to `n/d` when the numerator is
   odd and smaller than the denominator:
   - `<n>[ .-]<8|16|32|64>th/nd` anywhere ("1.32nd", "3 16ths", "5 8ths").
   - run-together `<n><16|32|64>` only directly before "inch" ("132 inch",
@@ -122,11 +135,14 @@ Rule details:
 - Capitalized number words at sentence start convert the same way
   ("Two options" → "2 options"); "One" alone stays.
 - Hyphenated forms ("thirty-two") are treated like spaced ones.
+- Words are Unicode letters, so a number word inside an accented word is never
+  split out ("tenía" is not "ten" + "ía").
 
 ### Vocabulary (word list)
 
 - Plain text file `config/vocabulary.txt`, mounted read-only into the container.
-  Format, one rule per line, `#` comments:
+  Format, one rule per line; `#` starts a comment at line start or after
+  whitespace (so "C# = see sharp" is a rule):
   ```
   # Right spelling = misheard variants
   Corkie = Corky, core key, corkey
