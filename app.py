@@ -36,56 +36,48 @@ if sys.platform == "win32":
     os.environ["PATH"] = ROOT_DIR + f";{ROOT_DIR}/ffmpeg;" + os.environ["PATH"]
 
 
+# Which onnx-asr hub model to serve. v3 is multilingual (25 European languages);
+# v2 is English-only and measurably more accurate on English dictation.
+MODEL_NAME = os.environ.get("PARAKEET_MODEL", "nemo-parakeet-tdt-0.6b-v3")
+
 try:
-    print("\nLoading Parakeet TDT 0.6B V3 ONNX model with INT8 quantization...")
+    print(f"\nLoading {MODEL_NAME} ONNX model with INT8 quantization...")
     import onnx_asr
-
     import onnxruntime as ort
-    # Try GPU providers first
-    available_providers = ort.get_available_providers()
-    print(f"Available providers: {available_providers}")
-    
-    # Priority: Tensorrt, CUDA, CPU
-    providers_to_try = []
-    if "TensorrtExecutionProvider" in available_providers:
-        providers_to_try.append("TensorrtExecutionProvider")
-    if "CUDAExecutionProvider" in available_providers:
-        providers_to_try.append("CUDAExecutionProvider")
-    providers_to_try.append("CPUExecutionProvider")
-    
-    print(f"Using providers: {providers_to_try}")
 
-    # Configure session options
+    inference_device = os.environ.get("INFERENCE_DEVICE", "cpu").lower()
+    available_providers = ort.get_available_providers()
+    print(f"Available ONNX providers: {available_providers}")
+    print(f"Requested device: {inference_device}")
+
     sess_options = ort.SessionOptions()
-    if "CPUExecutionProvider" in providers_to_try[0]:
+
+    if inference_device == "gpu":
+        providers = []
+        if "CUDAExecutionProvider" in available_providers:
+            providers.append("CUDAExecutionProvider")
+        providers.append("CPUExecutionProvider")
+
+        if len(providers) == 1:
+            print("WARNING: GPU requested but CUDAExecutionProvider not available, falling back to CPU")
+    else:
+        providers = ["CPUExecutionProvider"]
         sess_options.intra_op_num_threads = 8
         sess_options.inter_op_num_threads = 1
-    
-    asr_model = onnx_asr.load_model(
-        "nemo-parakeet-tdt-0.6b-v3",
-        quantization="int8",
-        providers=providers_to_try,
-        sess_options=sess_options,
-    ).with_timestamps()
+        sess_options.execution_mode = ort.ExecutionMode.ORT_SEQUENTIAL
+        sess_options.graph_optimization_level = ort.GraphOptimizationLevel.ORT_ENABLE_ALL
 
-    print(f"Available providers: {ort.get_available_providers()}")
-
-    # Configure session options for optimal CPU performance
-    sess_options = ort.SessionOptions()
-    sess_options.intra_op_num_threads = 4  # Match Waitress threads
-    sess_options.inter_op_num_threads = 1
-    sess_options.execution_mode = ort.ExecutionMode.ORT_SEQUENTIAL
-    sess_options.graph_optimization_level = ort.GraphOptimizationLevel.ORT_ENABLE_ALL
+    print(f"Using providers: {providers}")
 
     asr_model = onnx_asr.load_model(
-        "nemo-parakeet-tdt-0.6b-v3",
+        MODEL_NAME,
         quantization="int8",
-        providers=["CPUExecutionProvider"],
+        providers=providers,
         sess_options=sess_options,
     ).with_timestamps()
-    print("Model loaded successfully with CPU optimization (10.6x real-time speedup)!")
+    print(f"Model loaded successfully on {inference_device.upper()}!")
 except Exception as e:
-    print(f"❌ Model loading failed: {e}")
+    print(f"Model loading failed: {e}")
     import traceback
 
     traceback.print_exc()
@@ -314,7 +306,7 @@ def serve_logo():
 @app.route("/health")
 def health():
     return jsonify(
-        {"status": "healthy", "model": "parakeet-tdt-0.6b-v3", "speedup": "20.7x"}
+        {"status": "healthy", "model": MODEL_NAME, "speedup": "20.7x"}
     )
 
 

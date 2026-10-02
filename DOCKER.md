@@ -48,6 +48,8 @@ docker run -d --name parakeet-gpu -p 5092:5092 --gpus all \
 |----------|---------|-------------|
 | `HF_HOME` | `/app/models` | HuggingFace model cache |
 | `HF_HUB_CACHE` | `/app/models` | HuggingFace hub cache |
+| `INFERENCE_DEVICE` | `cpu` (`gpu` in the GPU image) | `cpu` or `gpu`. `gpu` uses CUDA when available and falls back to CPU otherwise |
+| `PARAKEET_MODEL` | `nemo-parakeet-tdt-0.6b-v3` | onnx-asr model name. `nemo-parakeet-tdt-0.6b-v2` is English-only and more accurate on English |
 
 ### Persistent Model Cache
 
