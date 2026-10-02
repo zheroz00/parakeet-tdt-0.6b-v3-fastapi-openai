@@ -109,7 +109,8 @@ Rule details:
   the Corkie = the quirky
   ```
 - Matching is case-insensitive and whole-word; possessives follow ("Corky's" →
-  "Corkie's"). Output uses the left side exactly as written. Longer variants
+  "Corkie's"). Output uses the left side exactly as written, except that a
+  match starting with a capital letter keeps it ("The quirky" → "The Corkie"). Longer variants
   are matched before shorter ones.
 - Context rules are just longer phrases ("the quirky"), so a real-word
   mishearing is only fixed in that context.
