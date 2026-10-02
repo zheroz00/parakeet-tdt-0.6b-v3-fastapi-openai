@@ -50,6 +50,13 @@ ARTICLE_DENOMINATORS = {"eighth": 8, "sixteenth": 16}
 # is a duration).
 ARTICLE_COMPOUND_UNITS = {"inch", "inches"}
 
+# "one third party library", "three eighth graders", "one half hour show": when
+# one of these follows, the denominator word is part of an ordinary phrase.
+NOT_A_FRACTION_BEFORE = (
+    "party", "parties", "grade", "grader", "graders", "century", "centuries",
+    "generation", "generations", "hour", "hours",
+)
+
 ORDINALS = {
     "first", "second", "third", "fourth", "fifth", "sixth", "seventh", "eighth",
     "ninth", "tenth", "eleventh", "twelfth", "thirteenth", "fourteenth",
@@ -58,7 +65,7 @@ ORDINALS = {
     "eightieth", "ninetieth", "hundredth", "thousandth",
 }
 
-_WORD = re.compile(r"[A-Za-z]+")
+_WORD = re.compile(r"[^\W\d_]+")  # any Unicode letters, so "tenía" is one word
 
 Change = Tuple[str, str]
 
@@ -162,8 +169,10 @@ def _close(groups: List[int], cur: Optional[int]) -> List[int]:
 
 def _join(groups: List[int]) -> str:
     """Spoken chunks become one number ("four seventy" -> 470) when every
-    chunk after the first is under 100; otherwise keep them separate."""
-    if len(groups) > 1 and all(g < 100 for g in groups[1:]):
+    chunk after the first is under 100; otherwise keep them separate. A lone
+    digit after a multi-digit chunk stays separate too ("twenty four seven
+    support" -> "24 7 support")."""
+    if len(groups) > 1 and all(g < 100 for g in groups[1:]) and not (groups[-1] < 10 <= groups[-2]):
         return "".join(str(g) for g in groups)
     return " ".join(str(g) for g in groups)
 
@@ -173,14 +182,16 @@ def _whole(groups: List[int]) -> Optional[int]:
     return int(joined) if " " not in joined else None
 
 
-def _collect(text: str, toks: List[_Tok], i: int, allowed) -> Tuple[List[str], bool]:
+def _collect(text: str, toks: List[_Tok], i: int, allowed, hyphen_denominators: bool = True) -> Tuple[List[str], bool]:
     """Number words starting at toks[i], joined by whitespace/hyphens.
 
     "and" is kept inside the run when it links "hundred"/"thousand" to a
     following number word ("one hundred and fifty"). Returns (words, blocked):
     blocked is True when the run was cut short by a number word hyphenated to a
     non-number ("sixty-four-bit", "five-volt"); the caller leaves the whole run,
-    that word included, as spoken.
+    that word included, as spoken. A number word hyphenated to a fraction
+    denominator ("three-quarters") does not block unless hyphen_denominators
+    is False (digits after a decimal point).
     """
     words: List[str] = []
     j = i
@@ -189,7 +200,7 @@ def _collect(text: str, toks: List[_Tok], i: int, allowed) -> Tuple[List[str], b
         if low == "and" and words and words[-1] in SCALES and _number_follows(text, toks, j, allowed):
             words.append(low)
         elif low in allowed:
-            if _hyphen_compound(text, toks, j, allowed):
+            if _hyphen_compound(text, toks, j, allowed, hyphen_denominators):
                 return words, True
             words.append(low)
         else:
@@ -207,11 +218,11 @@ def _hyphenated_to_next(text: str, toks: List[_Tok], j: int) -> bool:
     return j + 1 < len(toks) and text[toks[j].end:toks[j + 1].start] == "-"
 
 
-def _hyphen_compound(text: str, toks: List[_Tok], j: int, allowed) -> bool:
+def _hyphen_compound(text: str, toks: List[_Tok], j: int, allowed, hyphen_denominators: bool = True) -> bool:
     return (
         _hyphenated_to_next(text, toks, j)
         and toks[j + 1].low not in allowed
-        and not _hyphenated_denominator(text, toks, j)
+        and not (hyphen_denominators and _hyphenated_denominator(text, toks, j))
     )
 
 
@@ -237,6 +248,12 @@ def _follows_scale_and(text: str, toks: List[_Tok], i: int, converted_end: int) 
         and _joined(text, toks[i - 2], toks[i - 1])
         and _joined(text, toks[i - 1], toks[i])
     )
+
+
+def _denominator_blocked(text: str, toks: List[_Tok], den: int) -> bool:
+    """True when the word after the denominator at toks[den] makes it ordinary
+    prose ("third party", "eighth graders", "half hour")."""
+    return _next(text, toks, den + 1, den) in NOT_A_FRACTION_BEFORE
 
 
 def _is_fraction(num: Optional[int], word: str, den: int) -> bool:
@@ -265,7 +282,7 @@ def _match_at(text: str, toks: List[_Tok], i: int, converted_end: int = -1) -> O
 
     if first in ("a", "an"):
         nxt = _next(text, toks, i + 1, i)
-        if nxt in ARTICLE_DENOMINATORS:
+        if nxt in ARTICLE_DENOMINATORS and not _denominator_blocked(text, toks, i + 1):
             return 2, f"1/{ARTICLE_DENOMINATORS[nxt]}"
         after = _next(text, toks, i + 2, i + 1) if nxt else None
         if (nxt, after) in COMPOUND_DENOMINATORS and _next(text, toks, i + 3, i + 2) in ARTICLE_COMPOUND_UNITS:
@@ -296,8 +313,18 @@ def _match_at(text: str, toks: List[_Tok], i: int, converted_end: int = -1) -> O
     if i > 0 and toks[i - 1].low in ("dot", "point") and _joined(text, toks[i - 1], toks[i]):
         return k, None
 
+    # Exactly two single digits ("two three minutes", "test one two") are a
+    # range or a count, not one number.
+    if len(groups) == 2 and all(g < 10 for g in groups):
+        return k, None
+
     # "one thirty second" -> 1/32: the denominator's first word was read into the run.
-    if k >= 2 and (words[k - 1], nxt) in COMPOUND_DENOMINATORS and not _hyphenated_to_next(text, toks, end + 1):
+    if (
+        k >= 2
+        and (words[k - 1], nxt) in COMPOUND_DENOMINATORS
+        and not _hyphenated_to_next(text, toks, end + 1)
+        and not _denominator_blocked(text, toks, end + 1)
+    ):
         num_groups, _ = _parse_groups(words[: k - 1])
         den = COMPOUND_DENOMINATORS[(words[k - 1], nxt)]
         if _is_fraction(_whole(num_groups), nxt, den):
@@ -310,7 +337,12 @@ def _match_at(text: str, toks: List[_Tok], i: int, converted_end: int = -1) -> O
 
     # "three sixteenths" -> 3/16. A run ending in a tens word is an ordinal
     # ("twenty third"); "half-hour" and "quarter-inch" are not denominators.
-    if nxt in DENOMINATORS and words[k - 1] not in TENS and not _hyphenated_to_next(text, toks, end + 1):
+    if (
+        nxt in DENOMINATORS
+        and words[k - 1] not in TENS
+        and not _hyphenated_to_next(text, toks, end + 1)
+        and not _denominator_blocked(text, toks, end + 1)
+    ):
         num = _whole(groups)
         den = DENOMINATORS[nxt]
         if _is_fraction(num, nxt, den):
@@ -323,16 +355,12 @@ def _match_at(text: str, toks: List[_Tok], i: int, converted_end: int = -1) -> O
 
     whole = _join(groups)
 
-    # Decimal: "four point two" -> 4.2, "zero point one zero" -> 0.10.
+    # Decimal: "four point two" -> 4.2, "zero point one zero" -> 0.10; more
+    # than one "point" is a version number ("one point two point three" -> 1.2.3).
     if nxt == "point" and " " not in whole:
-        frac_start = end + 2
-        if _next(text, toks, frac_start, end + 1) in STARTERS:
-            frac_words, frac_blocked = _collect(text, toks, frac_start, STARTERS)
-            if frac_blocked:  # "four point two-bit"
-                return k + 1 + len(frac_words) + 1, None
-            frac_groups, _ = _parse_groups(frac_words)
-            digits = "".join(str(g) for g in frac_groups)
-            return k + 1 + len(frac_words), f"{whole}.{digits}"
+        decimal = _read_decimal(text, toks, i, whole, end)
+        if decimal is not None:
+            return decimal
 
     # IPv4: two or more "dot"s between numbers that are each 0-255.
     if nxt == "dot":
@@ -349,6 +377,29 @@ def _match_at(text: str, toks: List[_Tok], i: int, converted_end: int = -1) -> O
         return 1, None
 
     return k, whole
+
+
+def _read_decimal(text: str, toks: List[_Tok], i: int, whole: str, end: int) -> Optional[Tuple[int, Optional[str]]]:
+    """Read "<number> point <digit words>" (repeated for versions) starting at
+    toks[i]; end is the index of the last token of the whole-number part."""
+    parts = [whole]
+    j = end + 1  # index of the "point" token
+    while (
+        j + 1 < len(toks)
+        and toks[j].low == "point"
+        and _joined(text, toks[j - 1], toks[j])
+        and toks[j + 1].low in STARTERS
+        and _joined(text, toks[j], toks[j + 1])
+    ):
+        words, blocked = _collect(text, toks, j + 1, STARTERS, hyphen_denominators=False)
+        if blocked:  # "four point two-bit", "two point three-quarters": leave all
+            return j + 1 + len(words) + 1 - i, None
+        groups, _ = _parse_groups(words)
+        parts.append("".join(str(g) for g in groups))
+        j += 1 + len(words)
+    if len(parts) == 1:
+        return None
+    return j - i, ".".join(parts)
 
 
 def _read_ip(text: str, toks: List[_Tok], i: int, groups: List[int], k: int) -> Optional[Tuple[int, str]]:
@@ -369,10 +420,12 @@ def _read_ip(text: str, toks: List[_Tok], i: int, groups: List[int], k: int) -> 
 
 # Parakeet sometimes writes a spoken fraction in digits itself and garbles it:
 # "one thirty second inch" comes out as "1.32nd inch" or "132 inch".
-_DIGIT_ORDINAL_FRACTION = re.compile(r"\b(\d{1,2})[ .-](8|16|32|64)(?:th|nd)s?\b")
+_DIGIT_ORDINAL_FRACTION = re.compile(
+    r"(?<![\d.,])\b(\d{1,2})[ .-](8|16|32|64)(?:th|nd)s?\b(?!\s+(?i:" + "|".join(NOT_A_FRACTION_BEFORE) + r")\b)"
+)
 # Run-together form only for 16/32/64 and only before "inch", so real lengths
 # like "18 inch" or "65 inch" are left alone.
-_DIGIT_INCH_FRACTION = re.compile(r"\b(\d{1,2})(16|32|64)(?=\s+inch\b)")
+_DIGIT_INCH_FRACTION = re.compile(r"(?<![\d.,])\b(\d{1,2})(16|32|64)(?=\s+inch\b)")
 
 
 def _repair_digit_fractions(text: str) -> Tuple[str, List[Change]]:

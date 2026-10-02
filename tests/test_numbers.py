@@ -14,6 +14,11 @@ def converted(text):
     ("zero point one zero millimeters", "0.10 millimeters"),
     ("thirty eight point three tests", "38.3 tests"),
     ("three point twenty five", "3.25"),
+    ("zero point one six four inch hole", "0.164 inch hole"),
+    # version numbers: every "point" part is dotted
+    ("Version one point two point three", "Version 1.2.3"),
+    ("Node twenty two point one one point zero", "Node 22.11.0"),
+    ("one point two point three point four", "1.2.3.4"),
     # plain numbers, units kept as spoken
     ("twenty four volts and thirty seven percent", "24 volts and 37 percent"),
     ("two seconds, two options", "2 seconds, 2 options"),
@@ -32,6 +37,12 @@ def converted(text):
     ("fifty six hundred", "5600"),
     ("one ninety seven", "197"),
     ("five six seven eight", "5678"),
+    ("nine one one", "911"),
+    ("eight zero eight zero", "8080"),
+    ("ten ten", "1010"),
+    # a short last group after a multi-digit one is a separate number
+    ("twenty four seven support", "24 7 support"),
+    ("ten five", "10 5"),
     ("thirty-six zero eight", "3608"),
     # "and" after hundred/thousand belongs to the number
     ("one hundred and fifty", "150"),
@@ -116,6 +127,24 @@ def test_converts(spoken, written):
     "two-quarter-inch bolts",
     "one-half-hour slot",
     "twenty-third",
+    # fractions that are really ordinary prose
+    "We use one third party library",
+    "three eighth graders",
+    "We have 3 8th graders",
+    "One eighth grader",
+    "one half hour show",
+    "three sixteenth century churches",
+    "an eighth grader",
+    "three-quarters party",
+    # two single digits are a range, not one number
+    "give it two three minutes",
+    "five six people",
+    "test one two",
+    "zero zero",
+    # a hyphenated denominator is not a decimal's digits
+    "two point three-quarters of a mile",
+    # accented letters are part of words
+    "Él tenía diez años",
 ])
 def test_leaves_alone(text):
     assert converted(text) == text
@@ -141,6 +170,10 @@ def test_repairs_fractions_the_model_wrote_in_digits(written, repaired):
     "a 232 inch run",
     "the 32nd time",
     "2.4 network",
+    "A 0.116 inch wire",
+    "1.316 inch",
+    "1,116 inch",
+    "2.564 inch",
 ])
 def test_leaves_real_digit_numbers_alone(text):
     assert converted(text) == text
