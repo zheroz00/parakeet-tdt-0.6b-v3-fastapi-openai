@@ -85,6 +85,15 @@ Rule details:
   → `n/d`. Numerator may be "a"/"an" (= 1). "thirty second"/"sixty fourth" only
   become a fraction denominator when a numerator precedes them; "thirty seconds"
   is a duration → "30 seconds".
+- **Fractions the model already wrote in digits.** Parakeet sometimes writes a
+  spoken fraction as garbled digits: "one thirty second inch" → "1.32nd inch"
+  or "132 inch" (seen in the archive). Repaired to `n/d` when the numerator is
+  odd and smaller than the denominator:
+  - `<n>[ .-]<8|16|32|64>th/nd` anywhere ("1.32nd", "3 16ths", "5 8ths").
+  - run-together `<n><16|32|64>` only directly before "inch" ("132 inch",
+    "316 inch"). "18 inch", "65 inch", "132 inches" stay. Accepted risk: a
+    real "116 inch" would become "1/16 inch".
+- Hyphenated compounds stay as words: "one-off", "five-volt", "non-zero".
 - **IPv4:** two or more `dot` separators (three or more number groups), each group 0-255.
 - Capitalized number words at sentence start convert the same way
   ("Two options" → "2 options"); "One" alone stays.
