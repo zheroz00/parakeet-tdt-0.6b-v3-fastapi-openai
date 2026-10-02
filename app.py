@@ -27,6 +27,11 @@ import flask
 from flask import Flask, request, jsonify, render_template, Response
 from waitress import serve
 from pathlib import Path
+import logging
+
+from text_cleanup import Vocabulary, clean_segments
+
+logging.basicConfig(level=logging.INFO, format="%(levelname)s %(name)s: %(message)s")
 
 ROOT_DIR = Path(os.getcwd()).as_posix()
 os.environ["HF_HOME"] = ROOT_DIR + "/models"
@@ -99,6 +104,12 @@ app.config["MAX_CONTENT_LENGTH"] = 2000 * 1024 * 1024
 
 # Progress tracking
 progress_tracker = {}
+
+# Transcript cleanup: custom vocabulary, then spoken numbers to digits.
+FALSE_VALUES = ("false", "0", "no", "off")
+CLEANUP_ENABLED = os.environ.get("TRANSCRIPT_CLEANUP", "true").strip().lower() not in FALSE_VALUES
+vocabulary = Vocabulary(os.environ.get("VOCABULARY_PATH", "config/vocabulary.txt"))
+print(f"Transcript cleanup: {'on' if CLEANUP_ENABLED else 'off'} (vocabulary: {vocabulary.path})")
 
 
 def get_audio_duration(file_path: str) -> float:
@@ -639,6 +650,12 @@ def transcribe_audio():
         # Update progress to complete
         progress_tracker[unique_id]["status"] = "complete"
         progress_tracker[unique_id]["progress_percent"] = 100
+
+        wants_cleanup = request.form.get("cleanup", "true").strip().lower() not in FALSE_VALUES
+        if CLEANUP_ENABLED and wants_cleanup:
+            cleanup_changes = clean_segments(all_segments, vocabulary)
+            if cleanup_changes:
+                print(f"[{unique_id}] Cleanup: " + "; ".join(f"{heard} -> {written}" for heard, written in cleanup_changes))
 
         if not all_segments:
             # Return empty structure if nothing found, consistent with failures or silence?

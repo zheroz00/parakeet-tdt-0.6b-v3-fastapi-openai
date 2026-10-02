@@ -29,10 +29,11 @@ RUN pip install --no-cache-dir --upgrade pip && \
 # Copy application code
 COPY app.py .
 COPY templates/ templates/
+COPY text_cleanup/ text_cleanup/
 COPY parakeet.png .
 
 # Create directories for runtime
-RUN mkdir -p temp_uploads models && \
+RUN mkdir -p temp_uploads models config && \
     chown -R parakeet:parakeet /app
 
 # Switch to non-root user

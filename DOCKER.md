@@ -48,6 +48,11 @@ docker run -d --name parakeet-gpu -p 5092:5092 --gpus all \
 |----------|---------|-------------|
 | `HF_HOME` | `/app/models` | HuggingFace model cache |
 | `HF_HUB_CACHE` | `/app/models` | HuggingFace hub cache |
+| `INFERENCE_DEVICE` | `cpu` | `cpu` or `gpu`. `gpu` uses CUDA when available, else CPU |
+| `PARAKEET_MODEL` | `nemo-parakeet-tdt-0.6b-v3` | onnx-asr model name. `nemo-parakeet-tdt-0.6b-v2` is English-only and more accurate on English |
+| `PARAKEET_QUANTIZATION` | `int8` | `int8` or `none` (fp32). Same CPU speed, fp32 uses ~2 GB more RAM |
+| `TRANSCRIPT_CLEANUP` | `true` | Spoken numbers to digits plus custom vocabulary. `false` returns raw model text |
+| `VOCABULARY_PATH` | `config/vocabulary.txt` | Word list file (see `config/vocabulary.example.txt`). Re-read on change |
 
 ### Persistent Model Cache
 

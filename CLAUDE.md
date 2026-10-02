@@ -24,7 +24,9 @@ curl http://localhost:5092/health
 curl -F file=@audio.mp3 -F response_format=text http://localhost:5092/v1/audio/transcriptions
 ```
 
-There is no test suite, linter, or build step. `test_onnx_asr.py`, `test_onnx_config.py` and `inspect_model.py` are ad-hoc diagnostic scripts (print available ONNX providers / session options / model internals), not tests. `benchmark.py` POSTs files to a running server and writes to `./benchmark_results/`; its `TEST_AUDIO_DIR` is a hardcoded path that must be edited before use.
+Tests (pytest in a Python 3.10 container, no host install needed): `scripts/test.sh`, or `scripts/test.sh tests/test_numbers.py -k fraction` for a subset. Dry-run the cleanup over a private transcript archive with `python3 scripts/review_cleanup.py <transcripts.json> --show 10`.
+
+There is no linter or build step; the only tests cover `text_cleanup/`. `test_onnx_asr.py`, `test_onnx_config.py` and `inspect_model.py` are ad-hoc diagnostic scripts (print available ONNX providers / session options / model internals), not tests. `benchmark.py` POSTs files to a running server and writes to `./benchmark_results/`; its `TEST_AUDIO_DIR` is a hardcoded path that must be edited before use.
 
 ## Configuration
 
@@ -41,3 +43,4 @@ There is no test suite, linter, or build step. `test_onnx_asr.py`, `test_onnx_co
 - **One segment per chunk.** Each chunk produces exactly one segment, so SRT/VTT cues are up to ~90 s long, not sentence-level. "Words" are actually onnx-asr subword tokens with their timestamps.
 - **`model` form field is ignored** except the legacy value `parakeet_srt_words`, which returns SRT followed by the literal separator `----..----` and a JSON array of token timings. `verbose_json` hardcodes `"language": "english"` and zeroes the Whisper-specific fields.
 - **Progress tracking** is an in-memory `progress_tracker` dict keyed by job UUID, never pruned. The web UI polls `/status` (returns the first job still `processing`) and `/metrics` (psutil CPU/RAM) while a request is in flight; `/progress/<job_id>` is also available, and the default JSON response returns the id in `X-Job-ID`.
+- **Transcript cleanup** (`text_cleanup/`, stdlib only) runs once per request after transcription via `clean_segments()`: vocabulary fixes from `config/vocabulary.txt` (gitignored, bind-mounted read-only, re-read on change), then spoken numbers to digits. Rules and their rationale are in `docs/superpowers/specs/2026-10-02-transcript-cleanup-design.md`. `clean()` never raises; on error the raw text is returned. Opt out per request with form field `cleanup=false` or server-wide with `TRANSCRIPT_CLEANUP=false`.

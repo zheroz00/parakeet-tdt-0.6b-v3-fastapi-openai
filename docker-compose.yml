@@ -13,6 +13,7 @@ services:
       - "5092:5092"
     volumes:
       - parakeet-models:/app/models
+      - ./config:/app/config:ro
     environment:
       - INFERENCE_DEVICE=cpu
       - PARAKEET_MODEL=nemo-parakeet-tdt-0.6b-v2  # English-only; drop for the multilingual v3
@@ -40,6 +41,7 @@ services:
       - "5092:5092"
     volumes:
       - parakeet-models:/app/models
+      - ./config:/app/config:ro
     environment:
       - INFERENCE_DEVICE=gpu
       - PARAKEET_MODEL=nemo-parakeet-tdt-0.6b-v2
