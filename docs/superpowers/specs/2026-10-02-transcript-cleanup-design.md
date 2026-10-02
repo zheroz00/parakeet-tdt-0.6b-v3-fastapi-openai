@@ -89,6 +89,10 @@ Rule details:
   Eighth, sixteenth, thirty second and sixty fourth allow any numerator in
   the singular too ("three sixteenth inch" → 3/16). A denominator hyphenated
   onto a following word ("half-hour", "quarter-inch") is not a denominator.
+  The numerator and denominator may be joined by a hyphen, as the model often
+  writes them ("three-quarters" → 3/4, "three thirty-second inch" → 3/32 inch,
+  "five sixty-fourths" → 5/64); when that is not a valid fraction
+  ("two-quarters", "four thirty-seconds") the words stay as spoken.
   "a"/"an" (= 1) count before eighth/sixteenth ("an eighth inch" → 1/8 inch)
   and before thirty second/sixty fourth only when "inch"/"inches" follows
   ("a thirty second inch bit" → 1/32 inch bit, "a thirty second timeout"
@@ -107,7 +111,9 @@ Rule details:
   number word that continues it, "and" is part of the number ("one hundred and
   fifty" → 150, "two thousand and five" → 2005). A number right after
   "<hundred|thousand> and" that did not itself convert ("a hundred and fifty")
-  stays as words. Other "and" is untouched ("three and a half inches" →
+  stays as words. "and" is not taken when the number after it is followed by a
+  hundred/thousand that cannot attach ("one hundred and one hundred" → "100 and
+  100"; "three thousand and five hundred" → 3500). Other "and" is untouched ("three and a half inches" →
   "3 and a half inches").
 - **Hyphenated compounds stay as words:** "one-off", "five-volt", "non-zero".
   When a number word is hyphenated onto a non-number ("sixty-four-bit",
