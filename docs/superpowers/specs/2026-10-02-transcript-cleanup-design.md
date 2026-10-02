@@ -82,9 +82,19 @@ Rule details:
   zeros ("zero point one zero" → 0.10).
 - **Fractions:** `<numerator> <denominator>` where denominator is half, third,
   quarter, eighth, sixteenth, thirty second, sixty fourth (optionally plural)
-  → `n/d`. Numerator may be "a"/"an" (= 1). "thirty second"/"sixty fourth" only
-  become a fraction denominator when a numerator precedes them; "thirty seconds"
-  is a duration → "30 seconds".
+  → `n/d`. Only when the fraction is proper and in lowest terms: "two quarters"
+  (coins) → "2 quarters", "four eighths" → "4 eighths". Singular
+  half/third/quarter need a numerator of 1 ("one quarter" → 1/4, "two third
+  party vendors" unchanged); plurals allow any ("three quarters" → 3/4).
+  Eighth, sixteenth, thirty second and sixty fourth allow any numerator in
+  the singular too ("three sixteenth inch" → 3/16). A denominator hyphenated
+  onto a following word ("half-hour", "quarter-inch") is not a denominator.
+  "a"/"an" (= 1) count before eighth/sixteenth ("an eighth inch" → 1/8 inch)
+  and before thirty second/sixty fourth only when "inch"/"inches" follows
+  ("a thirty second inch bit" → 1/32 inch bit, "a thirty second timeout"
+  unchanged). "thirty second"/"sixty fourth" only become a fraction
+  denominator when a numerator precedes them; "thirty seconds" is a duration →
+  "30 seconds".
 - **Fractions the model already wrote in digits.** Parakeet sometimes writes a
   spoken fraction as garbled digits: "one thirty second inch" → "1.32nd inch"
   or "132 inch" (seen in the archive). Repaired to `n/d` when the numerator is
@@ -93,7 +103,15 @@ Rule details:
   - run-together `<n><16|32|64>` only directly before "inch" ("132 inch",
     "316 inch"). "18 inch", "65 inch", "132 inches" stay. Accepted risk: a
     real "116 inch" would become "1/16 inch".
-- Hyphenated compounds stay as words: "one-off", "five-volt", "non-zero".
+- **"and" inside a number:** directly after "hundred"/"thousand" and before a
+  number word that continues it, "and" is part of the number ("one hundred and
+  fifty" → 150, "two thousand and five" → 2005). A number right after
+  "<hundred|thousand> and" that did not itself convert ("a hundred and fifty")
+  stays as words. Other "and" is untouched ("three and a half inches" →
+  "3 and a half inches").
+- **Hyphenated compounds stay as words:** "one-off", "five-volt", "non-zero".
+  When a number word is hyphenated onto a non-number ("sixty-four-bit",
+  "twenty-one-year-old"), the whole run stays as spoken, not just that word.
 - **IPv4:** two or more `dot` separators (three or more number groups), each group 0-255.
 - Capitalized number words at sentence start convert the same way
   ("Two options" → "2 options"); "One" alone stays.
@@ -110,8 +128,12 @@ Rule details:
   ```
 - Matching is case-insensitive and whole-word; possessives follow ("Corky's" →
   "Corkie's"). Output uses the left side exactly as written, except that a
-  match starting with a capital letter keeps it ("The quirky" → "The Corkie"). Longer variants
-  are matched before shorter ones.
+  match at the start of the text or after `.`, `!` or `?` plus whitespace keeps
+  its capital ("The quirky" → "The Corkie"). Mid-sentence the spelling is used
+  as written ("alerts on Nabu" → "alerts on naboo"), because the speech model
+  capitalizes proper nouns itself. A right side with a capital after its first
+  letter (camelCase: "iPhone", "droidCarl") is never capitalized. Longer
+  variants are matched before shorter ones.
 - Context rules are just longer phrases ("the quirky"), so a real-word
   mishearing is only fixed in that context.
 - Hot reload: file mtime is checked per request; edits apply on the next
