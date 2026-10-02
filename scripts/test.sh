@@ -4,4 +4,4 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 exec docker run --rm -u "$(id -u)" -e HOME=/tmp -v "$PWD":/src -w /src python:3.10-slim \
-  sh -c 'pip install -q --user -r requirements-dev.txt 2>/dev/null && python -m pytest -q -p no:cacheprovider "$@"' -- "$@"
+  sh -c 'pip install -q --user --disable-pip-version-check --no-warn-script-location -r requirements-dev.txt && python -m pytest -q -p no:cacheprovider "$@"' -- "$@"
