@@ -38,6 +38,9 @@ def converted(text):
     ("two thousand and five", "2005"),
     ("three hundred and twenty six", "326"),
     ("three and a half inches", "3 and a half inches"),
+    ("one hundred and one hundred", "100 and 100"),
+    ("three thousand and five hundred", "3500"),
+    ("two hundred and fifty thousand", "250000"),
     # fractions
     ("one eighth of the way", "1/8 of the way"),
     ("a three sixteenth inch bit", "a 3/16 inch bit"),
@@ -50,6 +53,14 @@ def converted(text):
     ("three quarters of it", "3/4 of it"),
     ("one quarter", "1/4"),
     ("a thirty second inch bit", "1/32 inch bit"),
+    # hyphenated denominators, as the model often writes them
+    ("a one thirty-second inch bit", "a 1/32 inch bit"),
+    ("three thirty-second inch", "3/32 inch"),
+    ("five sixty-fourths", "5/64"),
+    ("three-quarters of it", "3/4 of it"),
+    ("one-quarter of the way", "1/4 of the way"),
+    ("seven-eighths", "7/8"),
+    ("a thirty-second inch bit", "1/32 inch bit"),
     # not fractions: not in lowest terms, or a singular half/third/quarter
     ("I put two quarters in", "I put 2 quarters in"),
     ("two quarter-inch bolts", "2 quarter-inch bolts"),
@@ -96,6 +107,15 @@ def test_converts(spoken, written):
     "two third party vendors",
     "one half-hour slot",
     "a thirty second timeout",
+    "a thirty-second timeout",
+    "the thirty-second time",
+    "one-off",
+    "two-quarters",
+    "four thirty-seconds",
+    "wait thirty-seconds",
+    "two-quarter-inch bolts",
+    "one-half-hour slot",
+    "twenty-third",
 ])
 def test_leaves_alone(text):
     assert converted(text) == text

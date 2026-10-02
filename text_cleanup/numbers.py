@@ -133,7 +133,27 @@ def _and_continues(cur: Optional[int], last: str, rest: List[str]) -> bool:
     if cur is None or last not in ("hundred", "thousand") or not rest or rest[0] not in STARTERS:
         return False
     kind = "unit" if rest[0] in UNITS else "teen" if rest[0] in TEENS else "tens"
-    return _continues(cur, last, kind, STARTERS[rest[0]])
+    if not _continues(cur, last, kind, STARTERS[rest[0]]):
+        return False
+    return _scale_can_follow(cur, rest)
+
+
+def _scale_can_follow(cur: int, rest: List[str]) -> bool:
+    """False when the number after "and" is followed by a hundred/thousand that
+    could not attach to it ("one hundred and one hundred" is two numbers)."""
+    tail = []
+    for w in rest:
+        if w not in STARTERS:
+            break
+        tail.append(w)
+    follow = rest[len(tail)] if len(tail) < len(rest) else None
+    if follow not in SCALES:
+        return True
+    groups, _ = _parse_groups(tail)
+    if len(groups) != 1:
+        return False
+    total = cur + groups[0]
+    return 1 <= total % 1000 <= 99 if follow == "hundred" else 1 <= total <= 999
 
 
 def _close(groups: List[int], cur: Optional[int]) -> List[int]:
@@ -188,13 +208,30 @@ def _hyphenated_to_next(text: str, toks: List[_Tok], j: int) -> bool:
 
 
 def _hyphen_compound(text: str, toks: List[_Tok], j: int, allowed) -> bool:
-    return _hyphenated_to_next(text, toks, j) and toks[j + 1].low not in allowed
+    return (
+        _hyphenated_to_next(text, toks, j)
+        and toks[j + 1].low not in allowed
+        and not _hyphenated_denominator(text, toks, j)
+    )
 
 
-def _follows_scale_and(text: str, toks: List[_Tok], i: int) -> bool:
-    """True when toks[i] sits right after "<hundred|thousand> and"."""
+def _hyphenated_denominator(text: str, toks: List[_Tok], j: int) -> bool:
+    """True when toks[j] and the hyphenated word after it spell a fraction
+    denominator the model wrote with a hyphen: "thirty-second", "sixty-fourths",
+    or a number word before "quarters" in "three-quarters". A denominator that
+    is itself hyphenated onward ("one-half-hour") is a compound, not a fraction."""
+    nxt = toks[j + 1].low
+    if (toks[j].low, nxt) in COMPOUND_DENOMINATORS:
+        return True
+    return nxt in DENOMINATORS and not _hyphenated_to_next(text, toks, j + 1)
+
+
+def _follows_scale_and(text: str, toks: List[_Tok], i: int, converted_end: int) -> bool:
+    """True when toks[i] sits right after "<hundred|thousand> and" and that
+    scale word was not itself part of a converted number."""
     return (
         i >= 2
+        and converted_end < i - 2
         and toks[i - 1].low == "and"
         and toks[i - 2].low in SCALES
         and _joined(text, toks[i - 2], toks[i - 1])
@@ -217,9 +254,10 @@ def _next(text: str, toks: List[_Tok], j: int, prev: int) -> Optional[str]:
     return None
 
 
-def _match_at(text: str, toks: List[_Tok], i: int) -> Optional[Tuple[int, Optional[str]]]:
+def _match_at(text: str, toks: List[_Tok], i: int, converted_end: int = -1) -> Optional[Tuple[int, Optional[str]]]:
     """Try to read a number starting at toks[i].
 
+    converted_end is the index of the last token already rewritten as digits.
     Returns None if no number starts here, else (tokens consumed, replacement),
     where replacement None means "leave these words as spoken".
     """
@@ -250,7 +288,7 @@ def _match_at(text: str, toks: List[_Tok], i: int) -> Optional[Tuple[int, Option
 
     # "a hundred and fifty": the number before "and" did not convert, so
     # converting only the tail would split it ("a hundred and 50").
-    if _follows_scale_and(text, toks, i):
+    if _follows_scale_and(text, toks, i, converted_end):
         return k, None
 
     # Right after "dot" or "point" with no number before it: ambiguous
@@ -265,6 +303,11 @@ def _match_at(text: str, toks: List[_Tok], i: int) -> Optional[Tuple[int, Option
         if _is_fraction(_whole(num_groups), nxt, den):
             return k + 1, f"{_whole(num_groups)}/{den}"
 
+    # "four thirty-seconds": hyphenated compound denominator that is not a
+    # fraction, so the phrase stays as spoken.
+    if (words[k - 1], nxt) in COMPOUND_DENOMINATORS and text[toks[end].end:toks[end + 1].start] == "-":
+        return k + 1, None
+
     # "three sixteenths" -> 3/16. A run ending in a tens word is an ordinal
     # ("twenty third"); "half-hour" and "quarter-inch" are not denominators.
     if nxt in DENOMINATORS and words[k - 1] not in TENS and not _hyphenated_to_next(text, toks, end + 1):
@@ -272,6 +315,11 @@ def _match_at(text: str, toks: List[_Tok], i: int) -> Optional[Tuple[int, Option
         den = DENOMINATORS[nxt]
         if _is_fraction(num, nxt, den):
             return k + 1, f"{num}/{den}"
+
+    # "two-quarters": hyphenated denominator that is not a fraction, so the
+    # whole phrase stays as spoken.
+    if nxt in DENOMINATORS and text[toks[end].end:toks[end + 1].start] == "-":
+        return k, None
 
     whole = _join(groups)
 
@@ -356,8 +404,9 @@ def _convert_words(text: str) -> Tuple[str, List[Change]]:
     changes: List[Change] = []
     pos = 0
     i = 0
+    converted_end = -1
     while i < len(toks):
-        match = _match_at(text, toks, i)
+        match = _match_at(text, toks, i, converted_end)
         if match is None:
             i += 1
             continue
@@ -368,6 +417,7 @@ def _convert_words(text: str) -> Tuple[str, List[Change]]:
             out.append(replacement)
             changes.append((text[start:end], replacement))
             pos = end
+            converted_end = i + used - 1
         i += used
     out.append(text[pos:])
     return "".join(out), changes
