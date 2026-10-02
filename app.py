@@ -36,8 +36,12 @@ if sys.platform == "win32":
     os.environ["PATH"] = ROOT_DIR + f";{ROOT_DIR}/ffmpeg;" + os.environ["PATH"]
 
 
+# Which onnx-asr hub model to serve. v3 is multilingual (25 European languages);
+# v2 is English-only and measurably more accurate on English dictation.
+MODEL_NAME = os.environ.get("PARAKEET_MODEL", "nemo-parakeet-tdt-0.6b-v3")
+
 try:
-    print("\nLoading Parakeet TDT 0.6B V3 ONNX model with INT8 quantization...")
+    print(f"\nLoading {MODEL_NAME} ONNX model with INT8 quantization...")
     import onnx_asr
     import onnxruntime as ort
 
@@ -66,7 +70,7 @@ try:
     print(f"Using providers: {providers}")
 
     asr_model = onnx_asr.load_model(
-        "nemo-parakeet-tdt-0.6b-v3",
+        MODEL_NAME,
         quantization="int8",
         providers=providers,
         sess_options=sess_options,
@@ -302,7 +306,7 @@ def serve_logo():
 @app.route("/health")
 def health():
     return jsonify(
-        {"status": "healthy", "model": "parakeet-tdt-0.6b-v3", "speedup": "20.7x"}
+        {"status": "healthy", "model": MODEL_NAME, "speedup": "20.7x"}
     )
 
 
