@@ -39,9 +39,15 @@ if sys.platform == "win32":
 # Which onnx-asr hub model to serve. v3 is multilingual (25 European languages);
 # v2 is English-only and measurably more accurate on English dictation.
 MODEL_NAME = os.environ.get("PARAKEET_MODEL", "nemo-parakeet-tdt-0.6b-v3")
+# "int8" (smaller download, less RAM) or "none" for full-precision fp32 weights.
+# On CPU both run at about the same speed, so fp32 costs only memory.
+_quant = os.environ.get("PARAKEET_QUANTIZATION", "int8").strip().lower()
+if _quant not in ("int8", "none"):
+    sys.exit(f"PARAKEET_QUANTIZATION must be 'int8' or 'none', got {_quant!r}")
+QUANTIZATION = None if _quant == "none" else _quant
 
 try:
-    print(f"\nLoading {MODEL_NAME} ONNX model with INT8 quantization...")
+    print(f"\nLoading {MODEL_NAME} ONNX model ({QUANTIZATION or 'fp32'})...")
     import onnx_asr
     import onnxruntime as ort
 
@@ -71,7 +77,7 @@ try:
 
     asr_model = onnx_asr.load_model(
         MODEL_NAME,
-        quantization="int8",
+        quantization=QUANTIZATION,
         providers=providers,
         sess_options=sess_options,
     ).with_timestamps()
@@ -306,7 +312,7 @@ def serve_logo():
 @app.route("/health")
 def health():
     return jsonify(
-        {"status": "healthy", "model": MODEL_NAME, "speedup": "20.7x"}
+        {"status": "healthy", "model": MODEL_NAME, "quantization": QUANTIZATION or "fp32", "speedup": "20.7x"}
     )
 
 

@@ -16,6 +16,7 @@ services:
     environment:
       - INFERENCE_DEVICE=cpu
       - PARAKEET_MODEL=nemo-parakeet-tdt-0.6b-v2  # English-only; drop for the multilingual v3
+      - PARAKEET_QUANTIZATION=none  # fp32: same CPU speed as int8 here, ~2 GB more RAM
     restart: unless-stopped
     healthcheck:
       test: [ "CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:5092/health')" ]
