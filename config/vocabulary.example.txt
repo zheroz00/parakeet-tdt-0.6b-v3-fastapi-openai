@@ -1,0 +1,11 @@
+# Custom vocabulary for transcript cleanup.
+# Copy to config/vocabulary.txt (gitignored) and edit. Changes apply on the
+# next transcription, no restart needed.
+#
+# Format: Right spelling = misheard variant, misheard variant, ...
+# Matching ignores case and only hits whole words. Use a longer phrase when
+# the misheard version is a real word, so it is only fixed in that context.
+
+Kubernetes = cooper netties, cuber netties
+PostgreSQL = post gress, postgres equal
+the Grafana = the griffon ah

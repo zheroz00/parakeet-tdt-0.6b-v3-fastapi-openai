@@ -39,3 +39,6 @@ nohup.out
 # IDE
 .idea/
 .vscode/
+
+# Personal transcript-cleanup word list (see config/vocabulary.example.txt)
+config/vocabulary.txt
