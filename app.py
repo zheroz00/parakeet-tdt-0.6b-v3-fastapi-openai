@@ -109,6 +109,7 @@ progress_tracker = {}
 FALSE_VALUES = ("false", "0", "no", "off")
 CLEANUP_ENABLED = os.environ.get("TRANSCRIPT_CLEANUP", "true").strip().lower() not in FALSE_VALUES
 vocabulary = Vocabulary(os.environ.get("VOCABULARY_PATH", "config/vocabulary.txt"))
+vocabulary.rules()  # load once at boot so a missing or malformed file is logged now
 print(f"Transcript cleanup: {'on' if CLEANUP_ENABLED else 'off'} (vocabulary: {vocabulary.path})")
 
 
