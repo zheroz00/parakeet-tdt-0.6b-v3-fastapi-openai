@@ -1,6 +1,7 @@
 """Custom vocabulary: fix words the model keeps mishearing ("Corky" -> "Corkie").
 
-File format, one rule per line, '#' starts a comment:
+File format, one rule per line, '#' starts a comment (at line start or after
+whitespace, so "C# = see sharp" is a rule):
 
     Corkie = Corky, core key, corkey
     the Corkie = the quirky
@@ -23,6 +24,9 @@ from typing import Dict, List, Optional, Tuple
 log = logging.getLogger(__name__)
 
 Change = Tuple[str, str]
+
+
+_COMMENT = re.compile(r"(?:^|\s)#.*")
 
 
 def _normalize(phrase: str) -> str:
@@ -57,7 +61,9 @@ class Rules:
 
         def _sub(match: "re.Match[str]") -> str:
             heard = match.group(0)
-            right = self.replacements[_normalize(heard)]
+            right = self.replacements.get(_normalize(heard))
+            if right is None:  # case folding the regex allows but .lower() does not ("İ")
+                return heard
             if _starts_sentence(match) and heard[0].isupper() and _can_capitalize(right):
                 right = right[0].upper() + right[1:]  # "The quirky" -> "The Corkie"
             if heard != right:
@@ -74,7 +80,7 @@ def parse_vocabulary(content: str, source: str = "vocabulary") -> Rules:
     """Parse vocabulary file content. Bad lines are logged and skipped."""
     replacements: Dict[str, str] = {}
     for lineno, raw in enumerate(content.splitlines(), start=1):
-        line = raw.split("#", 1)[0].strip()
+        line = _COMMENT.sub("", raw).strip()
         if not line:
             continue
         right, sep, variants = line.partition("=")

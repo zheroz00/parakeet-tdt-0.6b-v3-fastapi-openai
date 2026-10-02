@@ -138,3 +138,18 @@ def test_unreadable_file_keeps_previous_rules(tmp_path):
     st = path.stat()
     os.utime(path, ns=(st.st_atime_ns, st.st_mtime_ns + 1_000_000_000))
     assert vocab.rules().apply("Corky")[0] == "Corkie"
+
+
+def test_case_folding_mismatch_does_not_raise():
+    # IGNORECASE matches "İ" (dotted capital I) to "i", but its .lower() differs.
+    text, _ = apply("Istanbul = istanbul", "visit İstanbul now")
+    assert "stanbul" in text
+
+
+def test_hash_inside_a_word_is_not_a_comment():
+    assert apply("C# = see sharp", "I wrote see sharp code")[0] == "I wrote C# code"
+
+
+def test_trailing_comment_is_still_stripped():
+    assert apply("Corkie = Corky  # trailing comment", "Corky here")[0] == "Corkie here"
+    assert apply("# whole line comment\nCorkie = Corky", "Corky here")[0] == "Corkie here"
