@@ -6,7 +6,9 @@ File format, one rule per line, '#' starts a comment:
     the Corkie = the quirky
 
 Matching is case-insensitive and whole-word; the left side is written exactly
-as given. The file is re-read when it changes, so edits apply without a restart.
+as given, except that a lowercase name is capitalized at the start of a
+sentence (never mid-sentence, never camelCase spellings like "iPhone"). The
+file is re-read when it changes, so edits apply without a restart.
 """
 
 from __future__ import annotations
@@ -27,6 +29,20 @@ def _normalize(phrase: str) -> str:
     return " ".join(phrase.lower().split())
 
 
+_SENTENCE_START = re.compile(r"(?:\A|[.!?]\s+)\Z")
+
+
+def _starts_sentence(match: "re.Match[str]") -> bool:
+    """True at the very start of the text or right after ". ", "! " or "? "."""
+    return _SENTENCE_START.search(match.string[: match.start()]) is not None
+
+
+def _can_capitalize(right: str) -> bool:
+    """A lowercase first letter may be capitalized, unless the spelling has
+    capitals after it (camelCase brands such as "iPhone" keep their spelling)."""
+    return right[0].islower() and not any(c.isupper() for c in right.split()[0][1:])
+
+
 @dataclass(frozen=True)
 class Rules:
     """Parsed vocabulary: misheard variant (normalized) -> right spelling."""
@@ -42,7 +58,7 @@ class Rules:
         def _sub(match: "re.Match[str]") -> str:
             heard = match.group(0)
             right = self.replacements[_normalize(heard)]
-            if heard[0].isupper() and right[0].islower():
+            if _starts_sentence(match) and heard[0].isupper() and _can_capitalize(right):
                 right = right[0].upper() + right[1:]  # "The quirky" -> "The Corkie"
             if heard != right:
                 changes.append((heard, right))
@@ -84,7 +100,7 @@ class Vocabulary:
     """Vocabulary file on disk, reloaded whenever it changes.
 
     A missing file means no rules (logged once). A file that can't be read
-    keeps the previously loaded rules.
+    or stat'ed keeps the previously loaded rules.
     """
 
     def __init__(self, path: str):
@@ -92,6 +108,7 @@ class Vocabulary:
         self._rules = EMPTY_RULES
         self._signature: Optional[Tuple[int, int]] = None
         self._missing_logged = False
+        self._stat_error: Optional[str] = None
         self._lock = threading.Lock()
 
     def rules(self) -> Rules:
@@ -103,6 +120,13 @@ class Vocabulary:
                 self._missing_logged = True
             self._rules, self._signature = EMPTY_RULES, None
             return self._rules
+        except OSError as exc:
+            # Keep the previous rules; log once per distinct error.
+            if self._stat_error != str(exc):
+                self._stat_error = str(exc)
+                log.error("could not read vocabulary file %s (%s); keeping previous rules", self.path, exc)
+            return self._rules
+        self._stat_error = None
         signature = (st.st_mtime_ns, st.st_size)
         if signature != self._signature:
             with self._lock:
@@ -112,7 +136,7 @@ class Vocabulary:
 
     def _reload(self, signature: Tuple[int, int]) -> None:
         try:
-            with open(self.path, encoding="utf-8") as fh:
+            with open(self.path, encoding="utf-8-sig") as fh:
                 content = fh.read()
         except (OSError, UnicodeDecodeError) as exc:
             # Remember the signature so the error is logged once per file change.
