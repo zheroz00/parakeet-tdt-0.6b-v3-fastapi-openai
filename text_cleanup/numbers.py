@@ -8,6 +8,7 @@ as spoken. Full rules: docs/superpowers/specs/2026-10-02-transcript-cleanup-desi
 
 from __future__ import annotations
 
+import math
 import re
 from dataclasses import dataclass
 from typing import List, Optional, Tuple
@@ -29,6 +30,7 @@ STARTERS = {**UNITS, **TEENS, **TENS}  # words that can begin a number
 NUMBER_WORDS = set(STARTERS) | SCALES
 
 # "<numerator> <denominator>" -> fraction, e.g. "three sixteenths" -> 3/16.
+# Only in lowest terms, so "two quarters" (coins) and "four eighths" stay words.
 DENOMINATORS = {
     "half": 2, "halves": 2, "third": 3, "thirds": 3, "quarter": 4, "quarters": 4,
     "eighth": 8, "eighths": 8, "sixteenth": 16, "sixteenths": 16,
@@ -38,9 +40,15 @@ COMPOUND_DENOMINATORS = {
     ("thirty", "second"): 32, ("thirty", "seconds"): 32,
     ("sixty", "fourth"): 64, ("sixty", "fourths"): 64,
 }
+# Singular half/third/quarter need a numerator of 1 ("one quarter"); "two third
+# party vendors" is not a fraction. Plurals ("three quarters") allow any numerator.
+SINGULAR_ONE_ONLY = {"half", "third", "quarter"}
 # "a"/"an" count as 1 only before these, so "a third option" and
 # "a half hour" stay as words while "an eighth inch" becomes 1/8.
 ARTICLE_DENOMINATORS = {"eighth": 8, "sixteenth": 16}
+# "a thirty second" is a fraction only before "inch" ("a thirty second timeout"
+# is a duration).
+ARTICLE_COMPOUND_UNITS = {"inch", "inches"}
 
 ORDINALS = {
     "first", "second", "third", "fourth", "fifth", "sixth", "seventh", "eighth",
@@ -89,6 +97,11 @@ def _parse_groups(words: List[str]) -> Tuple[List[int], int]:
                     groups.append(cur)
                 cur = v
             last = kind
+        elif w == "and":
+            # Only reached between "<hundred|thousand>" and a number word that
+            # continues it ("one hundred and fifty"); otherwise it ends the number.
+            if not _and_continues(cur, last, words[used + 1:]):
+                return _close(groups, cur), used
         elif w == "hundred":
             part = cur % 1000 if cur is not None else 0
             if cur is None or last not in ("unit", "teen", "tens") or not 1 <= part <= 99:
@@ -115,6 +128,14 @@ def _continues(cur: int, last: str, kind: str, value: int) -> bool:
     return False
 
 
+def _and_continues(cur: Optional[int], last: str, rest: List[str]) -> bool:
+    """True when "and" after a hundred/thousand leads into a word that adds to it."""
+    if cur is None or last not in ("hundred", "thousand") or not rest or rest[0] not in STARTERS:
+        return False
+    kind = "unit" if rest[0] in UNITS else "teen" if rest[0] in TEENS else "tens"
+    return _continues(cur, last, kind, STARTERS[rest[0]])
+
+
 def _close(groups: List[int], cur: Optional[int]) -> List[int]:
     return groups + [cur] if cur is not None else groups
 
@@ -132,28 +153,61 @@ def _whole(groups: List[int]) -> Optional[int]:
     return int(joined) if " " not in joined else None
 
 
-def _collect(text: str, toks: List[_Tok], i: int, allowed) -> List[str]:
+def _collect(text: str, toks: List[_Tok], i: int, allowed) -> Tuple[List[str], bool]:
     """Number words starting at toks[i], joined by whitespace/hyphens.
 
-    A word hyphenated to a non-number ("one-off", "five-volt") ends the run
-    and is not part of it.
+    "and" is kept inside the run when it links "hundred"/"thousand" to a
+    following number word ("one hundred and fifty"). Returns (words, blocked):
+    blocked is True when the run was cut short by a number word hyphenated to a
+    non-number ("sixty-four-bit", "five-volt"); the caller leaves the whole run,
+    that word included, as spoken.
     """
-    words = []
+    words: List[str] = []
     j = i
-    while j < len(toks) and toks[j].low in allowed and (j == i or _joined(text, toks[j - 1], toks[j])):
-        if _hyphen_compound(text, toks, j, allowed):
+    while j < len(toks) and (j == i or _joined(text, toks[j - 1], toks[j])):
+        low = toks[j].low
+        if low == "and" and words and words[-1] in SCALES and _number_follows(text, toks, j, allowed):
+            words.append(low)
+        elif low in allowed:
+            if _hyphen_compound(text, toks, j, allowed):
+                return words, True
+            words.append(low)
+        else:
             break
-        words.append(toks[j].low)
         j += 1
-    return words
+    return words, False
+
+
+def _number_follows(text: str, toks: List[_Tok], j: int, allowed) -> bool:
+    return j + 1 < len(toks) and toks[j + 1].low in allowed and _joined(text, toks[j], toks[j + 1])
+
+
+def _hyphenated_to_next(text: str, toks: List[_Tok], j: int) -> bool:
+    """True when toks[j] is joined to the next word by a hyphen ("half-hour")."""
+    return j + 1 < len(toks) and text[toks[j].end:toks[j + 1].start] == "-"
 
 
 def _hyphen_compound(text: str, toks: List[_Tok], j: int, allowed) -> bool:
+    return _hyphenated_to_next(text, toks, j) and toks[j + 1].low not in allowed
+
+
+def _follows_scale_and(text: str, toks: List[_Tok], i: int) -> bool:
+    """True when toks[i] sits right after "<hundred|thousand> and"."""
     return (
-        j + 1 < len(toks)
-        and text[toks[j].end:toks[j + 1].start] == "-"
-        and toks[j + 1].low not in allowed
+        i >= 2
+        and toks[i - 1].low == "and"
+        and toks[i - 2].low in SCALES
+        and _joined(text, toks[i - 2], toks[i - 1])
+        and _joined(text, toks[i - 1], toks[i])
     )
+
+
+def _is_fraction(num: Optional[int], word: str, den: int) -> bool:
+    """Is "<num> <word>" a fraction? Lowest terms, proper, and a numerator of 1
+    for the singular half/third/quarter."""
+    if num is None or not 0 < num < den or math.gcd(num, den) != 1:
+        return False
+    return num == 1 or word not in SINGULAR_ONE_ONLY
 
 
 def _next(text: str, toks: List[_Tok], j: int, prev: int) -> Optional[str]:
@@ -176,7 +230,7 @@ def _match_at(text: str, toks: List[_Tok], i: int) -> Optional[Tuple[int, Option
         if nxt in ARTICLE_DENOMINATORS:
             return 2, f"1/{ARTICLE_DENOMINATORS[nxt]}"
         after = _next(text, toks, i + 2, i + 1) if nxt else None
-        if (nxt, after) in COMPOUND_DENOMINATORS:
+        if (nxt, after) in COMPOUND_DENOMINATORS and _next(text, toks, i + 3, i + 2) in ARTICLE_COMPOUND_UNITS:
             return 3, f"1/{COMPOUND_DENOMINATORS[(nxt, after)]}"
         return None
 
@@ -187,12 +241,17 @@ def _match_at(text: str, toks: List[_Tok], i: int) -> Optional[Tuple[int, Option
     if i > 0 and text[toks[i - 1].end:toks[i].start] == "-" and toks[i - 1].low not in NUMBER_WORDS:
         return None
 
-    words = _collect(text, toks, i, NUMBER_WORDS)
-    if not words:
-        return None  # "one-off"
+    words, blocked = _collect(text, toks, i, NUMBER_WORDS)
+    if blocked:
+        return len(words) + 1, None  # "sixty-four-bit", "one-off": all stays as spoken
     groups, k = _parse_groups(words)
     end = i + k - 1  # index of the last token in the number
     nxt = _next(text, toks, end + 1, end)
+
+    # "a hundred and fifty": the number before "and" did not convert, so
+    # converting only the tail would split it ("a hundred and 50").
+    if _follows_scale_and(text, toks, i):
+        return k, None
 
     # Right after "dot" or "point" with no number before it: ambiguous
     # ("dot three", "point two five zero"), leave it.
@@ -200,19 +259,18 @@ def _match_at(text: str, toks: List[_Tok], i: int) -> Optional[Tuple[int, Option
         return k, None
 
     # "one thirty second" -> 1/32: the denominator's first word was read into the run.
-    if k >= 2 and (words[k - 1], nxt) in COMPOUND_DENOMINATORS:
+    if k >= 2 and (words[k - 1], nxt) in COMPOUND_DENOMINATORS and not _hyphenated_to_next(text, toks, end + 1):
         num_groups, _ = _parse_groups(words[: k - 1])
-        num = _whole(num_groups)
         den = COMPOUND_DENOMINATORS[(words[k - 1], nxt)]
-        if num is not None and 0 < num < den:
-            return k + 1, f"{num}/{den}"
+        if _is_fraction(_whole(num_groups), nxt, den):
+            return k + 1, f"{_whole(num_groups)}/{den}"
 
     # "three sixteenths" -> 3/16. A run ending in a tens word is an ordinal
-    # ("twenty third"), and improper fractions are left alone.
-    if nxt in DENOMINATORS and words[k - 1] not in TENS:
+    # ("twenty third"); "half-hour" and "quarter-inch" are not denominators.
+    if nxt in DENOMINATORS and words[k - 1] not in TENS and not _hyphenated_to_next(text, toks, end + 1):
         num = _whole(groups)
         den = DENOMINATORS[nxt]
-        if num is not None and 0 < num < den:
+        if _is_fraction(num, nxt, den):
             return k + 1, f"{num}/{den}"
 
     whole = _join(groups)
@@ -221,7 +279,9 @@ def _match_at(text: str, toks: List[_Tok], i: int) -> Optional[Tuple[int, Option
     if nxt == "point" and " " not in whole:
         frac_start = end + 2
         if _next(text, toks, frac_start, end + 1) in STARTERS:
-            frac_words = _collect(text, toks, frac_start, STARTERS)
+            frac_words, frac_blocked = _collect(text, toks, frac_start, STARTERS)
+            if frac_blocked:  # "four point two-bit"
+                return k + 1 + len(frac_words) + 1, None
             frac_groups, _ = _parse_groups(frac_words)
             digits = "".join(str(g) for g in frac_groups)
             return k + 1 + len(frac_words), f"{whole}.{digits}"
@@ -248,7 +308,9 @@ def _read_ip(text: str, toks: List[_Tok], i: int, groups: List[int], k: int) -> 
     j = i + k  # index of the token after the current part
     while j + 1 < len(toks) and toks[j].low == "dot" and _joined(text, toks[j - 1], toks[j]) \
             and toks[j + 1].low in STARTERS and _joined(text, toks[j], toks[j + 1]):
-        words = _collect(text, toks, j + 1, NUMBER_WORDS)
+        words, blocked = _collect(text, toks, j + 1, NUMBER_WORDS)
+        if blocked:
+            return None
         part_groups, used = _parse_groups(words)
         octets.append(_whole(part_groups))
         j = j + 1 + used

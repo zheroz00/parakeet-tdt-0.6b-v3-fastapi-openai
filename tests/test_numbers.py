@@ -33,6 +33,11 @@ def converted(text):
     ("one ninety seven", "197"),
     ("five six seven eight", "5678"),
     ("thirty-six zero eight", "3608"),
+    # "and" after hundred/thousand belongs to the number
+    ("one hundred and fifty", "150"),
+    ("two thousand and five", "2005"),
+    ("three hundred and twenty six", "326"),
+    ("three and a half inches", "3 and a half inches"),
     # fractions
     ("one eighth of the way", "1/8 of the way"),
     ("a three sixteenth inch bit", "a 3/16 inch bit"),
@@ -42,6 +47,13 @@ def converted(text):
     ("two thirds of it", "2/3 of it"),
     ("seven eighths", "7/8"),
     ("fifteen sixteenths", "15/16"),
+    ("three quarters of it", "3/4 of it"),
+    ("one quarter", "1/4"),
+    ("a thirty second inch bit", "1/32 inch bit"),
+    # not fractions: not in lowest terms, or a singular half/third/quarter
+    ("I put two quarters in", "I put 2 quarters in"),
+    ("two quarter-inch bolts", "2 quarter-inch bolts"),
+    ("four eighths", "4 eighths"),
     # IPv4
     ("one ninety two dot one sixty eight dot one dot twenty", "192.168.1.20"),
     ("ten dot ten dot ten dot one fifty eight", "10.10.10.158"),
@@ -74,6 +86,16 @@ def test_converts(spoken, written):
     "five-volt rail",
     "Non-zero status",
     "someone, everyone, none, often",
+    # hyphenated compounds stay whole
+    "a sixty-four-bit build",
+    "a twenty-one-year-old",
+    "thirty-two-bit color",
+    # "and" does not rescue a number that did not start
+    "a hundred and fifty",
+    # fraction look-alikes
+    "two third party vendors",
+    "one half-hour slot",
+    "a thirty second timeout",
 ])
 def test_leaves_alone(text):
     assert converted(text) == text
